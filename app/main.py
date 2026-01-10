@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import uvicorn
 from app.core.report_summarizer_api import router as police_report_router
+from app.core.spare_parts_upload_api import router as spare_parts_router
+from app.core.spare_part_recommendation_api import router as spare_part_recommendation_router
 
 
 def get_application() -> FastAPI:
@@ -39,6 +41,8 @@ def get_application() -> FastAPI:
     
     # Include API routers
     application.include_router(police_report_router)
+    application.include_router(spare_parts_router)
+    application.include_router(spare_part_recommendation_router)
     return application
 
 app = get_application()
