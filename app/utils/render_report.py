@@ -105,8 +105,8 @@ def render_police_report_pdf(
         logger.info(f"Rendering PDF for police report: {filename}")
         
         # Use production webhook URL
-        # n8n_webhook_url = "http://178.128.124.9:5678/webhook/b4ea9c9c-7f4d-41dd-baa4-b710926d7cd2"
-        n8n_webhook_url = "http://178.128.124.9:5678/webhook-test/99b2cb63-5e81-43b6-a143-29dbb2bbb0f1"
+        n8n_webhook_url = "http://178.128.124.9:5678/webhook/99b2cb63-5e81-43b6-a143-29dbb2bbb0f1"
+        # n8n_webhook_url = "http://178.128.124.9:5678/webhook-test/99b2cb63-5e81-43b6-a143-29dbb2bbb0f1"
         n8n_webhook_payload = {
             "data": analysis_data
         }
