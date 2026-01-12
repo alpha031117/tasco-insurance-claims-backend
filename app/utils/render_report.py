@@ -121,6 +121,15 @@ def render_police_report_pdf(
             # Expected format: a list of files; take the first
             file_info = resp_json[0] if isinstance(resp_json, list) and resp_json else resp_json
             justification_road_act = file_info.get("justification_road_act") if file_info.get("justification_road_act") else None
+            insurer_policy_holder = file_info.get("insurer.policy_holder") if file_info.get("insurer.policy_holder") else None
+            insurer_vehicle_registration = file_info.get("insurer.vehicle_registration") if file_info.get("insurer.vehicle_registration") else None
+            insurer_age = file_info.get("insurer.age") if file_info.get("insurer.age") else None
+            insurer_gender = file_info.get("insurer.gender") if file_info.get("insurer.gender") else None
+            insurer_occupational = file_info.get("insurer.occupational") if file_info.get("insurer.occupational") else None
+            accident_info_date = file_info.get("accident_info.date") if file_info.get("accident_info.date") else None
+            accident_info_time = file_info.get("accident_info.time") if file_info.get("accident_info.time") else None
+            accident_info_location = file_info.get("accident_info.location") if file_info.get("accident_info.location") else None
+            suspect_vehicle_registration = file_info.get("liability_assessment.primary_fault_party") if file_info.get("liability_assessment.primary_fault_party") else None
             download_link = file_info.get("download_link") if isinstance(file_info, dict) else None
             
             if not download_link:
@@ -133,10 +142,23 @@ def render_police_report_pdf(
                     "success": True,
                     "download_link": download_link,
                     "justification_road_act": justification_road_act,
+                    "insurer": {
+                        "policy_holder": insurer_policy_holder,
+                        "vehicle_registration": insurer_vehicle_registration,
+                        "age": insurer_age,
+                        "gender": insurer_gender,
+                        "occupational": insurer_occupational,
+                    },
+                    "accident_info": {
+                        "date": accident_info_date,
+                        "time": accident_info_time,
+                        "location": accident_info_location,
+                    },
+                    "suspect_vehicle_registration": suspect_vehicle_registration,
                     "filename": filename,
                     "file_info": file_info
-                }
-            )
+                    }
+                )
             
         except Exception as e:
             logger.exception("Failed to retrieve download link from webhook response")
