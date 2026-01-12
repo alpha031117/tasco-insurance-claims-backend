@@ -120,17 +120,25 @@ def render_police_report_pdf(
             resp_json = n8n_webhook_response.json()
             # Expected format: a list of files; take the first
             file_info = resp_json[0] if isinstance(resp_json, list) and resp_json else resp_json
-            justification_road_act = file_info.get("justification_road_act") if file_info.get("justification_road_act") else None
-            insurer_policy_holder = file_info.get("insurer.policy_holder") if file_info.get("insurer.policy_holder") else None
-            insurer_vehicle_registration = file_info.get("insurer.vehicle_registration") if file_info.get("insurer.vehicle_registration") else None
-            insurer_age = file_info.get("insurer.age") if file_info.get("insurer.age") else None
-            insurer_gender = file_info.get("insurer.gender") if file_info.get("insurer.gender") else None
-            insurer_occupational = file_info.get("insurer.occupational") if file_info.get("insurer.occupational") else None
-            accident_info_date = file_info.get("accident_info.date") if file_info.get("accident_info.date") else None
-            accident_info_time = file_info.get("accident_info.time") if file_info.get("accident_info.time") else None
-            accident_info_location = file_info.get("accident_info.location") if file_info.get("accident_info.location") else None
-            suspect_vehicle_registration = file_info.get("liability_assessment.primary_fault_party") if file_info.get("liability_assessment.primary_fault_party") else None
-            download_link = file_info.get("download_link") if isinstance(file_info, dict) else None
+            
+            # Extract direct properties
+            justification_road_act = file_info.get("justification_road_act")
+            suspect_vehicle_registration = file_info.get("suspect_vehicle_registration")
+            download_link = file_info.get("download_link")
+            
+            # Extract nested insurer properties
+            insurer = file_info.get("insurer", {})
+            insurer_policy_holder = insurer.get("policy_holder") if isinstance(insurer, dict) else None
+            insurer_vehicle_registration = insurer.get("vehicle_registration") if isinstance(insurer, dict) else None
+            insurer_age = insurer.get("age") if isinstance(insurer, dict) else None
+            insurer_gender = insurer.get("gender") if isinstance(insurer, dict) else None
+            insurer_occupational = insurer.get("occupational") if isinstance(insurer, dict) else None
+            
+            # Extract nested accident_info properties
+            accident_info = file_info.get("accident_info", {})
+            accident_info_date = accident_info.get("date") if isinstance(accident_info, dict) else None
+            accident_info_time = accident_info.get("time") if isinstance(accident_info, dict) else None
+            accident_info_location = accident_info.get("location") if isinstance(accident_info, dict) else None
             
             if not download_link:
                 raise ValueError("download_link not found in webhook response")
