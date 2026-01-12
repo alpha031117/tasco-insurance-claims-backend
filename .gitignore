@@ -1,6 +1,7 @@
 /logs
 /venv
 *.json
+example_json/
 
 # Byte-compiled / optimized / DLL files
 app/__pycache__/
