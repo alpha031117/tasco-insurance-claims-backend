@@ -88,34 +88,22 @@ async def analyze_spare_part_recommendation(
         # Process with Claude client
         logger.info("Sending image files to Claude for spare part recommendation")
         result = claude_client.analyze_spare_part_recommendation(base64_data_list)
-        # result = {
-        #     "success": True,
-        #     "response": "spare_part.json",
-        #     "usage": {
-        #         "input_tokens": 100,
-        #         "output_tokens": 100
-        #     }
-        # }
         
         if result["success"]:
-        #     logger.info("Claude spare part recommendation analysis completed successfully")
+            logger.info("Claude spare part recommendation analysis completed successfully")
             
-        #     # Check if response exists and is not empty
-        #     response_text = result.get("response")
-        #     if not response_text:
-        #         logger.error("Claude returned empty response")
-        #         raise HTTPException(
-        #             status_code=500,
-        #             detail="Claude returned an empty response. Please try again."
-        #         )
+            # Check if response exists and is not empty
+            response_text = result.get("response")
+            if not response_text:
+                logger.error("Claude returned empty response")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Claude returned an empty response. Please try again."
+                )
             
             # Try to parse the JSON response
             try:
-                # parsed_response = json.loads(response_text)
-
-                # Read spare_part.json temporarily
-                with open("spare_part.json", "r", encoding="utf-8") as f:
-                    parsed_response = json.load(f)
+                parsed_response = json.loads(response_text)
 
                 # Extract damaged parts from Claude response
                 damaged_parts = parsed_response.get("damaged_parts", [])
