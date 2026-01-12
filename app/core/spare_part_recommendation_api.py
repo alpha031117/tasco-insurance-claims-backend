@@ -87,15 +87,15 @@ async def analyze_spare_part_recommendation(
         
         # Process with Claude client
         logger.info("Sending image files to Claude for spare part recommendation")
-        # result = claude_client.analyze_spare_part_recommendation(base64_data_list)
-        result = {
-            "success": True,
-            "response": "spare_part.json",
-            "usage": {
-                "input_tokens": 100,
-                "output_tokens": 100
-            }
-        }
+        result = claude_client.analyze_spare_part_recommendation(base64_data_list)
+        # result = {
+        #     "success": True,
+        #     "response": "spare_part.json",
+        #     "usage": {
+        #         "input_tokens": 100,
+        #         "output_tokens": 100
+        #     }
+        # }
         
         if result["success"]:
         #     logger.info("Claude spare part recommendation analysis completed successfully")
