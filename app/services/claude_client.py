@@ -95,14 +95,12 @@ class ClaudeClient:
             
             for idx, base64_data in enumerate(base64_data_list):
                 content.append({
-                    "type": "document",
+                    "type": "image",
                     "source": {
                         "type": "base64",
-                        # Accepts common image types: jpeg, png, jpg
-                        "media_type": "image/png",  # Most Claude APIs use mime type per input, so we use "image/jpeg" for jpg/jpeg, but can be "image/c" if needed.
+                        "media_type": "image/jpeg",
                         "data": base64_data
-                    },
-                    "name": f"Image {idx+1}"
+                    }
                 })
             
             content.append({
