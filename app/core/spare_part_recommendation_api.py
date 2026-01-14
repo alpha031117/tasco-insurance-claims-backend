@@ -5,19 +5,46 @@ from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 import base64
 import json
+import os
+import re
+import tempfile
 from typing import List
+from pathlib import Path
 from app.services.claude_client import claude_client
 from app.services.voyage_client import voyage_client
 from app.services.supabase_client import supabase_vector_client
 from app.utils.logger import logger
 from app.config import settings
+from app.utils.preprocess_video import extract_frames_from_video
 
+
+def clean_json_response(response_text: str) -> str:
+    """
+    Clean JSON response by removing markdown code fences if present.
+    
+    Args:
+        response_text: Raw response text from Claude
+        
+    Returns:
+        Cleaned JSON string
+    """
+    # Remove markdown code fences (```json ... ``` or ``` ... ```)
+    cleaned = response_text.strip()
+    
+    # Check if response starts with code fence
+    if cleaned.startswith("```"):
+        # Remove opening fence (```json or ```)
+        cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned)
+        # Remove closing fence (```)
+        cleaned = re.sub(r'\n?```\s*$', '', cleaned)
+    
+    return cleaned.strip()
 # Create router for police report endpoints
 router = APIRouter(prefix="/spare/part/recommendation", tags=["Spare Part Recommendation"])
 
 @router.post("/spare-part-recommendation")
 async def analyze_spare_part_recommendation(
-    files: List[UploadFile] = File(..., description="Image file(s) to analyze")
+    files: List[UploadFile] = File(..., description="Image or video file(s) to analyze")
 ):
     """
     Analyze image file(s) and return recommendation spare parts for repair.
@@ -33,7 +60,7 @@ async def analyze_spare_part_recommendation(
     """
     try:
         # Validate file types
-        allowed_extensions = ('.png', '.jpg', '.jpeg')
+        allowed_extensions = ('.png', '.jpg', '.jpeg', '.mp4', '.mov', '.avi', '.mkv', '.webm')
         for file in files:
             if not file.filename:
                 raise HTTPException(
@@ -54,36 +81,92 @@ async def analyze_spare_part_recommendation(
                 detail="No files provided. Please upload at least one image file."
             )
         
-        logger.info(f"Processing {len(files)} image file(s) for spare part recommendation")
-        
-        # Convert image files to base64
+        # Convert files to base64 (supports both images and videos)
         base64_data_list = []
-        for file in files:
+        
+        if any(file.filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm')) for file in files):
+            logger.info("Processing video file(s) for spare part recommendation")
+            
+            # Get the first video file
+            video_file = files[0]
+            temp_video_path = None
+            
             try:
-                # Read file content
-                file_content = await file.read()
+                # Read the uploaded video content
+                video_content = await video_file.read()
                 
-                # Validate that file is not empty
-                if not file_content:
+                if not video_content:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"File {file.filename} is empty"
+                        detail=f"Video file {video_file.filename} is empty"
                     )
                 
-                # Convert to base64
-                base64_data = base64.b64encode(file_content).decode('utf-8')
-                base64_data_list.append(base64_data)
+                # Create a temporary file to save the video
+                # Use the original file extension
+                file_extension = Path(video_file.filename).suffix
+                with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
+                    temp_video_path = temp_file.name
+                    temp_file.write(video_content)
                 
-                logger.info(f"Successfully encoded {file.filename} to base64")
+                logger.info(f"Saved uploaded video to temporary file: {temp_video_path}")
+                
+                # Extract frames from the video as base64
+                base64_frames = extract_frames_from_video(
+                    video_path=temp_video_path,
+                    frame_interval=30,  # Extract 1 frame per second (assuming 30 fps)
+                    max_frames=10  # Limit to 10 frames to avoid too many images for Claude
+                )
+                
+                logger.info(f"Successfully extracted {len(base64_frames)} frames from video")
+                
+                # Add all extracted frames to base64_data_list
+                base64_data_list.extend(base64_frames)
                 
             except HTTPException:
                 raise
             except Exception as e:
-                logger.error(f"Error processing file {file.filename}: {e}")
+                logger.error(f"Error processing video file: {e}")
                 raise HTTPException(
-                    status_code=400,
-                    detail=f"Error processing file {file.filename}: {str(e)}"
+                    status_code=500,
+                    detail=f"Error processing video: {str(e)}"
                 )
+            finally:
+                # Clean up: Remove the temporary video file
+                if temp_video_path and os.path.exists(temp_video_path):
+                    try:
+                        os.remove(temp_video_path)
+                        logger.info(f"Cleaned up temporary video file: {temp_video_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to clean up temporary video file {temp_video_path}: {e}")
+        else:
+            logger.info("Processing image file(s) for spare part recommendation")
+            # Convert image files to base64
+            for file in files:
+                try:
+                    # Read file content
+                    file_content = await file.read()
+                    
+                    # Validate that file is not empty
+                    if not file_content:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"File {file.filename} is empty"
+                        )
+            
+                    # Convert to base64
+                    base64_data = base64.b64encode(file_content).decode('utf-8')
+                    base64_data_list.append(base64_data)
+                    
+                    logger.info(f"Successfully encoded {file.filename} to base64")
+                    
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    logger.error(f"Error processing file {file.filename}: {e}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Error processing file {file.filename}: {str(e)}"
+                    )
         
         # Process with Claude client
         logger.info("Sending image files to Claude for spare part recommendation")
@@ -103,7 +186,15 @@ async def analyze_spare_part_recommendation(
             
             # Try to parse the JSON response
             try:
-                parsed_response = json.loads(response_text)
+                # First, try to parse as-is
+                try:
+                    parsed_response = json.loads(response_text)
+                except json.JSONDecodeError:
+                    # If that fails, clean up markdown code fences and try again
+                    logger.info("Initial JSON parse failed, attempting to clean markdown code fences")
+                    cleaned_response = clean_json_response(response_text)
+                    parsed_response = json.loads(cleaned_response)
+                    logger.info("Successfully parsed JSON after cleaning markdown code fences")
 
                 # Extract damaged parts from Claude response
                 damaged_parts = parsed_response.get("damaged_parts", [])
