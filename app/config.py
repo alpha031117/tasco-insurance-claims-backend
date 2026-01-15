@@ -12,8 +12,11 @@ class Settings(BaseSettings):
     voyage_api_key: Optional[str] = None
     embedding_dimension: int = 1024  # Voyage AI default dimension (1024)
     embedding_model: str = "voyage-2"  # Voyage AI model (voyage-2, voyage-lite-02, voyage-large-2, etc.)
+    # Google API key (optional, for future use)
+    google_api_key: Optional[str] = None
 
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Ignore extra fields in .env that aren't defined in the model
 
 settings = Settings()

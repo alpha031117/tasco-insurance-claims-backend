@@ -3,11 +3,13 @@ Spare Part Recommendation API endpoints for spare part recommendation using Clau
 """
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
+import asyncio
 import base64
 import json
 import os
 import re
 import tempfile
+import time
 from typing import List
 from pathlib import Path
 from app.services.claude_client import claude_client
@@ -39,6 +41,71 @@ def clean_json_response(response_text: str) -> str:
         cleaned = re.sub(r'\n?```\s*$', '', cleaned)
     
     return cleaned.strip()
+
+
+async def generate_embedding_with_rate_limit(
+    voyage_client_instance,
+    search_text: str,
+    delay_seconds: float = 20.0,
+    max_retries: int = 3
+) -> list:
+    """
+    Generate embedding with rate limiting and retry logic.
+    
+    Voyage AI free tier has limits of:
+    - 3 RPM (requests per minute) = 1 request every 20 seconds
+    - 10K TPM (tokens per minute)
+    
+    Args:
+        voyage_client_instance: Voyage client instance
+        search_text: Text to generate embedding for
+        delay_seconds: Delay between requests (default: 20 seconds for 3 RPM)
+        max_retries: Maximum number of retries on rate limit errors
+        
+    Returns:
+        Embedding vector
+    """
+    for attempt in range(max_retries):
+        try:
+            # Generate the embedding
+            embedding = voyage_client_instance.generate_query_embedding(search_text)
+            
+            # Add delay after successful request to respect rate limits
+            if delay_seconds > 0:
+                logger.info(f"Rate limit buffer: waiting {delay_seconds} seconds before next request")
+                await asyncio.sleep(delay_seconds)
+            
+            return embedding
+            
+        except Exception as e:
+            error_msg = str(e).lower()
+            
+            # Check if it's a rate limit error
+            if "rate limit" in error_msg or "rpm" in error_msg or "tpm" in error_msg:
+                if attempt < max_retries - 1:
+                    # Exponential backoff: wait longer on each retry
+                    wait_time = delay_seconds * (2 ** attempt)
+                    logger.warning(
+                        f"Rate limit hit (attempt {attempt + 1}/{max_retries}). "
+                        f"Waiting {wait_time} seconds before retry..."
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"Rate limit error persists after {max_retries} attempts: {e}")
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Voyage AI rate limit exceeded. Please try again later or add payment method. Error: {str(e)}"
+                    )
+            else:
+                # Not a rate limit error, raise immediately
+                logger.error(f"Error generating embedding: {e}")
+                raise
+    
+    # Should not reach here, but just in case
+    raise HTTPException(
+        status_code=500,
+        detail="Failed to generate embedding after multiple retries"
+    )
 # Create router for police report endpoints
 router = APIRouter(prefix="/spare/part/recommendation", tags=["Spare Part Recommendation"])
 
@@ -229,6 +296,7 @@ async def analyze_spare_part_recommendation(
                     )
                 
                 logger.info(f"Processing {len(damaged_parts)} damaged parts for spare part recommendations")
+                logger.info(f"Note: Rate limiting applied - 20 second delay between Voyage AI requests (3 RPM limit)")
                 
                 # Process each damaged part to find matching spare parts
                 spare_part_recommendations = []
@@ -248,8 +316,14 @@ async def analyze_spare_part_recommendation(
                         
                         logger.info(f"Processing damaged part {idx}/{len(damaged_parts)}: {part_name}")
                         
-                        # Generate query embedding for the damaged part
-                        query_embedding = voyage_client.generate_query_embedding(search_text)
+                        # Generate query embedding with rate limiting
+                        # 20 seconds delay for 3 RPM limit (except for last item)
+                        delay = 20.0 if idx < len(damaged_parts) else 0.0
+                        query_embedding = await generate_embedding_with_rate_limit(
+                            voyage_client,
+                            search_text,
+                            delay_seconds=delay
+                        )
                         
                         # Query spare parts database using search_motorcycle_parts RPC function
                         # Map vehicle info to filters: brand -> brand_filter, make/model -> make_filter
